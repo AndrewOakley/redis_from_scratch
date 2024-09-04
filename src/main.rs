@@ -17,11 +17,11 @@ use crate::deserialize::deserialize;
 // "+hello world\r\n”
 
 fn main() {
-    let test_1 = "+OK\r\n".to_string();
+    let test_1 = "+OK\r\n";
 
     let result_1 = deserialize(&test_1).unwrap();
 
-    println!("Value: {}", result_1.val);
-    println!("length: {}", result_1.val.len());
-    println!("type: {}", result_1.val_type);
+    // println!("Value: {}", result_1.val);
+    // println!("length: {}", result_1.val.len());
+    // println!("type: {}", result_1.val_type);
 }

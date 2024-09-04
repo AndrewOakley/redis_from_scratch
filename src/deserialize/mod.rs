@@ -1,6 +1,7 @@
 use std::fmt;
 
-pub enum DataTypes {
+
+pub enum DataType {
     SimpleString,
     Errors,
     Integers,
@@ -8,44 +9,38 @@ pub enum DataTypes {
     Arrays,
 }
 
-impl fmt::Display for DataTypes {
+impl fmt::Display for DataType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let variant_name = match self {
-            DataTypes::SimpleString => "SimpleString",
-            DataTypes::Errors => "Errors",
-            DataTypes::Integers => "Integers",
-            DataTypes::BulkStrings => "BulkStrings",
-            DataTypes::Arrays => "Arrays",
+            DataType::SimpleString => "SimpleString",
+            DataType::Errors => "Errors",
+            DataType::Integers => "Integers",
+            DataType::BulkStrings => "BulkStrings",
+            DataType::Arrays => "Arrays",
         };
         write!(f, "{}", variant_name)
     }
 }
 
 pub struct DeserializedValue {
-    pub val: String,
-    pub val_type: DataTypes,
+    val: Box<String>,
+    data_type: DataType,
 }
 
 pub fn deserialize(input: &str) -> Result<DeserializedValue, String> {
-    let data_type_char = input.chars().nth(0);
-
-    let mut result: String = String::new();
-    match data_type_char {
+    let deserialzed = match input.chars().nth(0) {
         Some(byte) => match byte {
-            '+' => parse_simple_string(&mut result, &input[1..]),
-            _ => return Err(String::from("Invalid first character")),
+            '+' => parse_simple_string( &input[1..]),
+            _ => Err(String::from("First character invalid")),
         }
-        None => return Err(String::from("Empty string found")),
+        None => Err(String::from("Empty input")),
     };
 
 
-    Ok(DeserializedValue {
-        val: result,
-        val_type: DataTypes::SimpleString,
-    })
+    deserialzed
 }
 
-fn parse_simple_string(result: &mut String, input: &str) {
+fn parse_simple_string(input: &str) -> Result<DeserializedValue, String> {
     let mut buf = String::new();
     let mut has_error = false;
     let mut chars = input.chars().peekable();
@@ -70,6 +65,17 @@ fn parse_simple_string(result: &mut String, input: &str) {
     }
 
     if !has_error {
-     *result = buf;
+     return Ok(DeserializedValue {
+        val: Box::new(buf),
+        data_type: DataType::SimpleString,
+     });
     }
+
+    return Err(format!("Could not parse data for {}", input))
+}
+
+
+#[cfg(test)]
+mod tests {
+    use crate::*
 }
