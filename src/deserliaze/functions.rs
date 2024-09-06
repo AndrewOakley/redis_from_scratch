@@ -10,7 +10,7 @@ pub enum DataType {
     Array(Vec<DataType>),
 }
 
-fn parse_crlf(input: &str) -> Result<String> {
+fn parse_crlf(input: &str) -> Result<(String, usize)> {
     if input.len() < 2 {
         return Err(Error::ParseError(f!("length error Basic parse, {}", input)));
     }
@@ -18,23 +18,30 @@ fn parse_crlf(input: &str) -> Result<String> {
     let crlf = input.find("\r\n");
 
     match input.find("\r\n") {
-        Some(loc) => Ok(input[..loc].to_string()),
+        Some(crlf_loc) => Ok((input[..crlf_loc].to_string(), crlf_loc+2)),
             _ => Err(Error::ParseError(f!("mssing crlf Basic parse, {}", input))),
     }
 }
 
 pub fn deserialize(input: &str) -> Result<DataType> {
+    match deserialize_helper(input) {
+        Ok(result) => Ok(result.0),
+        Err(e) => Err(e),
+    }
+}
+
+pub fn deserialize_helper(input: &str) -> Result<(DataType, usize)> {
     match input.chars().nth(0) {
         Some(resp_type) => match resp_type {
             '+' => {
                 match parse_crlf( &input[1..]) {
-                    Ok(val) => Ok(DataType::SimpleString(val)),
+                    Ok(val) => Ok((DataType::SimpleString(val.0), val.1+1)),
                     Err(e) => Err(e),
                 }
             },
             '-' => {
                 match parse_crlf( &input[1..]) {
-                    Ok(val) => Ok(DataType::Error(val)),
+                    Ok(val) => Ok((DataType::Error(val.0), val.1+1)),
                     Err(e) => Err(e),
                 }
             },
@@ -43,7 +50,7 @@ pub fn deserialize(input: &str) -> Result<DataType> {
                     Some(crlf_loc) => {
                         let num_part = &input[1..crlf_loc];
                         match num_part.parse::<i64>() {
-                            Ok(val) => Ok(DataType::Integer(val)),
+                            Ok(val) => Ok((DataType::Integer(val), crlf_loc+2)),
                             Err(_) => Err(Error::ParseError(f!("integer parse"))),
                         }
                     },
@@ -57,8 +64,9 @@ pub fn deserialize(input: &str) -> Result<DataType> {
                             .parse()
                             .map_err(|_| Error::ParseError(f!("bulk string parse, {}", input)))?;
 
+
                         if len == -1 {
-                            return Ok(DataType::BulkString(None));
+                            return Ok((DataType::BulkString(None), crlf_loc+2));
                         }
 
                         if len < 0 {
@@ -74,36 +82,50 @@ pub fn deserialize(input: &str) -> Result<DataType> {
                         }
 
                         match parse_crlf( &input[start_pos..end_pos]) {
-                            Ok(val) => Ok(DataType::BulkString(Some(val))),
+                            Ok(val) => Ok((DataType::BulkString(Some(val.0)), end_pos)),
                             Err(e) => Err(e),
                         }
                     },
                     _ => Err(Error::ParseError(f!("bulk string parse, {}", input)))
                 }
             },
-            // '*' => {
-            //     let crlf_loc = input.find("\r\n");
-            //     match crlf_loc {
-            //         Some(loc) => {
-            //             let len: i64 = input[1..loc]
-            //                 .parse()
-            //                 .map_err(|_| Error::ParseError(f!("array parse")))?;
+            '*' => {
+                match input.find("\r\n") {
+                    Some(crlf_loc) => {
+                        let len: i64 = input[1..crlf_loc]
+                            .parse()
+                            .map_err(|_| Error::ParseError(f!("array parse")))?;
 
-            //             if len < 0 {
-            //                 return Err(Error::ParseError(f!("array parse")));
-            //             }
+                        if len < 0 {
+                            return Err(Error::ParseError(f!("array parse")));
+                        }
 
-            //             if len == 0 {
-            //                 return Ok(DataType::Array(Vec::new()));
-            //             }
+                        if len == 0 {
+                            return Ok((DataType::Array(Vec::new()), crlf_loc+1));
+                        }
 
-            //             if loc + 2 < input.len() {
-                            
-            //             }
-            //         },
-            //         _ => Err(Error::ParseError(f!("bulk string parse, {}", input)))
-            //     }
-            // },
+                        let ulen: usize = usize::try_from(len).unwrap();
+                        let mut cur_len: usize = 0;
+                        let mut input_index = crlf_loc+2;
+                        let mut result_array: Vec<DataType> = Vec::new();
+
+                        while cur_len < ulen {
+                            match deserialize_helper(&input[input_index..]) {
+                                Ok(result) => {
+                                    result_array.push(result.0);
+                                    input_index += result.1;
+                                },
+                                Err(e) => return Err(e),
+                            }
+
+                            cur_len += 1;
+                        }
+
+                        Ok((DataType::Array(result_array), input_index))
+                    },
+                    _ => Err(Error::ParseError(f!("bulk string parse, {}", input)))
+                }
+            },
             _ => Err(Error::IdentifierInvalid),
         },
         _ => Err(Error::EmptyInput),
@@ -158,6 +180,77 @@ mod tests {
         for (test, expect)  in zip(tests, expected) {
             let result = deserialize(test).unwrap();
             assert_eq!(result, DataType::BulkString(expect));
+        }
+    }
+
+    #[test]
+    fn arrays_happy() {
+        let tests = [
+            "*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n",
+            "*4\r\n:1\r\n:2\r\n:3\r\n$5\r\nhello\r\n",
+            "*1\r\n$4\r\nping\r\n”",
+            "*2\r\n$4\r\necho\r\n$11\r\nhello world\r\n",
+            "*2\r\n$3\r\nget\r\n$3\r\nkey\r\n",
+            "*2\r\n$3\r\nget\r\n$3\r\nkey\r\n",
+            ];
+        let expected = [
+            vec![DataType::BulkString(Some("hello".to_owned())), DataType::BulkString(Some("world".to_owned()))],
+            vec![DataType::Integer(1), DataType::Integer(2), DataType::Integer(3), DataType::BulkString(Some("hello".to_owned()))],
+            vec![DataType::BulkString(Some("ping".to_owned()))],
+            vec![DataType::BulkString(Some("echo".to_owned())), DataType::BulkString(Some("hello world".to_owned()))],
+            vec![DataType::BulkString(Some("get".to_owned())), DataType::BulkString(Some("key".to_owned()))],
+            ];
+        let mut has_error = false;
+
+        for (test, expect)  in zip(tests, expected) {
+            let result = deserialize(test).unwrap();
+            match result {
+                DataType::Array(res) => {
+                    for val in zip(res, expect) {
+                        assert_eq!(val.0, val.1);
+                    }
+                },
+                _ => panic!(),
+            }
+        }
+    }
+
+    #[test]
+    fn nested_arrays_happy() {
+        let tests = [
+            "*2\r\n*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n*4\r\n:1\r\n:2\r\n:3\r\n$5\r\nhello\r\n",
+            ];
+        let expected = [
+                vec![
+                    DataType::Array(vec![
+                        DataType::BulkString(Some("hello".to_owned())),
+                        DataType::BulkString(Some("world".to_owned()))]
+                    ),
+                    DataType::Array(vec![
+                        DataType::Integer(1), DataType::Integer(2),
+                        DataType::Integer(3), DataType::BulkString(Some("hello".to_owned()))]
+                    ),
+                ]
+            ];
+        let mut has_error = false;
+
+        for (test, expect)  in zip(tests, expected) {
+            let result = deserialize(test).unwrap();
+            match result {
+                DataType::Array(res) => {
+                    for outer in zip(res, expect) {
+                        match outer {
+                            (DataType::Array(r), DataType::Array(e)) => {
+                                for inner in zip(r, e) {
+                                    assert_eq!(inner.0, inner.1);
+                                }
+                            },
+                            _ => panic!(),
+                        }
+                    }
+                },
+                _ => panic!(),
+            }
         }
     }
 
