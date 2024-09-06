@@ -34,22 +34,26 @@ pub fn deserialize(input: &str) -> Result<DataType> {
             },
             '-' => {
                 match parse_crlf( &input[1..]) {
-                    Ok(val) => Ok(DataType::Error(val.to_string())),
+                    Ok(val) => Ok(DataType::Error(val)),
                     Err(e) => Err(e),
                 }
             },
             ':' => {
-                let num_part = &input[1..input.len() - 2];
-                match num_part.parse::<i64>() {
-                    Ok(val) => Ok(DataType::Integer(val)),
-                    Err(_) => Err(Error::ParseError(f!("integer parse, {}", input))),
+                match input.find("\r\n") {
+                    Some(crlf_loc) => {
+                        let num_part = &input[1..crlf_loc];
+                        match num_part.parse::<i64>() {
+                            Ok(val) => Ok(DataType::Integer(val)),
+                            Err(_) => Err(Error::ParseError(f!("integer parse"))),
+                        }
+                    },
+                    _ => Err(Error::ParseError(f!("integer parse crlf error"))),
                 }
             },
             '$' => {
-                let crlf_loc = input.find("\r\n");
-                match crlf_loc {
-                    Some(loc) => {
-                        let len: i64 = input[1..loc]
+                match input.find("\r\n") {
+                    Some(crlf_loc) => {
+                        let len: i64 = input[1..crlf_loc]
                             .parse()
                             .map_err(|_| Error::ParseError(f!("bulk string parse, {}", input)))?;
 
@@ -57,11 +61,19 @@ pub fn deserialize(input: &str) -> Result<DataType> {
                             return Ok(DataType::BulkString(None));
                         }
 
-                        if loc + 2 >= input.len() {
-                            return Err(Error::ParseError(f!("out of bounds integer parse, {}", input)));
+                        if len < 0 {
+                            return Err(Error::ParseError(f!("bulk string parse, {}", input)));
                         }
 
-                        match parse_crlf( &input[loc+2..]) {
+                        let ulen: usize = usize::try_from(len).unwrap();
+                        let start_pos = crlf_loc + 2;
+                        let end_pos = start_pos + ulen + 2;
+
+                        if end_pos > input.len() {
+                            return Err(Error::ParseError(f!("out of bounds bulk parse, {}", input)));
+                        }
+
+                        match parse_crlf( &input[start_pos..end_pos]) {
                             Ok(val) => Ok(DataType::BulkString(Some(val))),
                             Err(e) => Err(e),
                         }
