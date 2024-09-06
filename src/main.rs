@@ -1,5 +1,13 @@
-mod deserialize;
-use crate::deserialize::deserialize;
+#![allow(unused)] // remove eventually, this is for dev
+
+
+use crate::prelude::*;
+use std::fs::read_dir;
+
+mod error;
+mod prelude;
+mod utils;
+mod deserliaze;
 
 // For Simple Strings, the first byte of the reply is "+"
 // For Errors, the first byte of the reply is "-"
@@ -16,12 +24,6 @@ use crate::deserialize::deserialize;
 // "$0\r\n\r\n"
 // "+hello world\r\n”
 
-fn main() {
-    let test_1 = "+OK\r\n";
-
-    let result_1 = deserialize(&test_1).unwrap();
-
-    // println!("Value: {}", result_1.val);
-    // println!("length: {}", result_1.val.len());
-    // println!("type: {}", result_1.val_type);
+fn main() -> Result<()> {
+    Ok(())
 }
