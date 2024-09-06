@@ -7,19 +7,19 @@ pub enum DataType {
     Error(String),
     Integer(i64),
     BulkString(Option<String>),
-    Array(Vec<DataType>),
+    Array(Option<Vec<DataType>>),
 }
 
 fn parse_crlf(input: &str) -> Result<(String, usize)> {
     if input.len() < 2 {
-        return Err(Error::ParseError(f!("length error Basic parse, {}", input)));
+        return Err(Error::ParseError(f!("length error Basic parse")));
     }
 
     let crlf = input.find("\r\n");
 
     match input.find("\r\n") {
         Some(crlf_loc) => Ok((input[..crlf_loc].to_string(), crlf_loc+2)),
-            _ => Err(Error::ParseError(f!("mssing crlf Basic parse, {}", input))),
+            _ => Err(Error::ParseError(f!("mssing crlf Basic parse"))),
     }
 }
 
@@ -62,7 +62,7 @@ pub fn deserialize_helper(input: &str) -> Result<(DataType, usize)> {
                     Some(crlf_loc) => {
                         let len: i64 = input[1..crlf_loc]
                             .parse()
-                            .map_err(|_| Error::ParseError(f!("bulk string parse, {}", input)))?;
+                            .map_err(|_| Error::ParseError(f!("bulk string length parse")))?;
 
 
                         if len == -1 {
@@ -70,7 +70,7 @@ pub fn deserialize_helper(input: &str) -> Result<(DataType, usize)> {
                         }
 
                         if len < 0 {
-                            return Err(Error::ParseError(f!("bulk string parse, {}", input)));
+                            return Err(Error::ParseError(f!("bulk string parse")));
                         }
 
                         let ulen: usize = usize::try_from(len).unwrap();
@@ -78,7 +78,7 @@ pub fn deserialize_helper(input: &str) -> Result<(DataType, usize)> {
                         let end_pos = start_pos + ulen + 2;
 
                         if end_pos > input.len() {
-                            return Err(Error::ParseError(f!("out of bounds bulk parse, {}", input)));
+                            return Err(Error::ParseError(f!("out of bounds bulk parse")));
                         }
 
                         match parse_crlf( &input[start_pos..end_pos]) {
@@ -86,7 +86,7 @@ pub fn deserialize_helper(input: &str) -> Result<(DataType, usize)> {
                             Err(e) => Err(e),
                         }
                     },
-                    _ => Err(Error::ParseError(f!("bulk string parse, {}", input)))
+                    _ => Err(Error::ParseError(f!("bulk string parse")))
                 }
             },
             '*' => {
@@ -94,14 +94,18 @@ pub fn deserialize_helper(input: &str) -> Result<(DataType, usize)> {
                     Some(crlf_loc) => {
                         let len: i64 = input[1..crlf_loc]
                             .parse()
-                            .map_err(|_| Error::ParseError(f!("array parse")))?;
+                            .map_err(|_| Error::ParseError(f!("array parse invalid length")))?;
+
+                        if len == -1 {
+                            return Ok((DataType::Array(None), crlf_loc+2));
+                        }
 
                         if len < 0 {
-                            return Err(Error::ParseError(f!("array parse")));
+                            return Err(Error::ParseError(f!("array parse invalid length")));
                         }
 
                         if len == 0 {
-                            return Ok((DataType::Array(Vec::new()), crlf_loc+1));
+                            return Ok((DataType::Array(Some(Vec::new())), crlf_loc+1));
                         }
 
                         let ulen: usize = usize::try_from(len).unwrap();
@@ -121,9 +125,9 @@ pub fn deserialize_helper(input: &str) -> Result<(DataType, usize)> {
                             cur_len += 1;
                         }
 
-                        Ok((DataType::Array(result_array), input_index))
+                        Ok((DataType::Array(Some(result_array)), input_index))
                     },
-                    _ => Err(Error::ParseError(f!("bulk string parse, {}", input)))
+                    _ => Err(Error::ParseError(f!("array parse crlf not found")))
                 }
             },
             _ => Err(Error::IdentifierInvalid),
@@ -192,13 +196,17 @@ mod tests {
             "*2\r\n$4\r\necho\r\n$11\r\nhello world\r\n",
             "*2\r\n$3\r\nget\r\n$3\r\nkey\r\n",
             "*2\r\n$3\r\nget\r\n$3\r\nkey\r\n",
+            "*-1\r\n",
+            "*0\r\n",
             ];
         let expected = [
-            vec![DataType::BulkString(Some("hello".to_owned())), DataType::BulkString(Some("world".to_owned()))],
-            vec![DataType::Integer(1), DataType::Integer(2), DataType::Integer(3), DataType::BulkString(Some("hello".to_owned()))],
-            vec![DataType::BulkString(Some("ping".to_owned()))],
-            vec![DataType::BulkString(Some("echo".to_owned())), DataType::BulkString(Some("hello world".to_owned()))],
-            vec![DataType::BulkString(Some("get".to_owned())), DataType::BulkString(Some("key".to_owned()))],
+            Some(vec![DataType::BulkString(Some("hello".to_owned())), DataType::BulkString(Some("world".to_owned()))]),
+            Some(vec![DataType::Integer(1), DataType::Integer(2), DataType::Integer(3), DataType::BulkString(Some("hello".to_owned()))]),
+            Some(vec![DataType::BulkString(Some("ping".to_owned()))]),
+            Some(vec![DataType::BulkString(Some("echo".to_owned())), DataType::BulkString(Some("hello world".to_owned()))]),
+            Some(vec![DataType::BulkString(Some("get".to_owned())), DataType::BulkString(Some("key".to_owned()))]),
+            None,
+            Some(vec![]),
             ];
         let mut has_error = false;
 
@@ -220,27 +228,27 @@ mod tests {
         let tests = [
             "*2\r\n*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n*4\r\n:1\r\n:2\r\n:3\r\n$5\r\nhello\r\n",
             ];
-        let expected = [
-                vec![
-                    DataType::Array(vec![
-                        DataType::BulkString(Some("hello".to_owned())),
-                        DataType::BulkString(Some("world".to_owned()))]
-                    ),
-                    DataType::Array(vec![
-                        DataType::Integer(1), DataType::Integer(2),
-                        DataType::Integer(3), DataType::BulkString(Some("hello".to_owned()))]
-                    ),
-                ]
-            ];
+        let expected: [Vec<DataType>; 1] = [
+            vec![
+                DataType::Array(Some(vec![
+                    DataType::BulkString(Some("hello".to_owned())),
+                    DataType::BulkString(Some("world".to_owned()))]
+                )),
+                DataType::Array(Some(vec![
+                    DataType::Integer(1), DataType::Integer(2),
+                    DataType::Integer(3), DataType::BulkString(Some("hello".to_owned()))]
+                ))
+            ]
+        ];
         let mut has_error = false;
 
         for (test, expect)  in zip(tests, expected) {
             let result = deserialize(test).unwrap();
             match result {
-                DataType::Array(res) => {
+                DataType::Array(Some(res)) => {
                     for outer in zip(res, expect) {
                         match outer {
-                            (DataType::Array(r), DataType::Array(e)) => {
+                            (DataType::Array(Some(r)), DataType::Array(Some(e))) => {
                                 for inner in zip(r, e) {
                                     assert_eq!(inner.0, inner.1);
                                 }
@@ -256,11 +264,17 @@ mod tests {
 
     #[test]
     fn deserialize_unhappy() {
-        let tests = ["+OK\n", "+\r", "", ":\r\n", ":andy\r\n", "$test\r\n", "$\r\ntest\r\n"];
-
-        for test  in tests {
+        let tests = [
+            "+OK\n", "+\r", "", ":\r\n", ":andy\r\n", "$test\r\n",
+            "$\r\ntest\r\n", "*2\r\n:10\r\n",
+        ];
+    
+        for test in tests.iter() {
             let result = deserialize(test);
-            result.expect_err("Test");
+            match result {
+                Err(e) => println!("{e}"),
+                _ => panic!(),
+            }
         }
     }
 }
