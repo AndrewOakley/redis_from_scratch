@@ -1,6 +1,5 @@
 //! Main Crate Error
 
-use clap::error;
 
 #[derive(thiserror::Error, Debug, PartialEq, Eq)]
 pub enum Error {

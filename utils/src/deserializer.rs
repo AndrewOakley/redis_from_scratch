@@ -1,6 +1,6 @@
 //! Deserialze RESP protocol values
 use crate::prelude::*;
-use crate::resp_utils::DataType;
+use crate::DataType;
 
 
 pub fn deserialize(input: &str) -> Result<DataType> {
@@ -121,8 +121,6 @@ fn parse_crlf(input: &str) -> Result<(String, usize)> {
         return Err(Error::ParseError(f!("length error Basic parse")));
     }
 
-    let crlf = input.find("\r\n");
-
     match input.find("\r\n") {
         Some(crlf_loc) => Ok((input[..crlf_loc].to_string(), crlf_loc+2)),
             _ => Err(Error::ParseError(f!("mssing crlf Basic parse"))),
@@ -200,7 +198,6 @@ mod tests {
             None,
             Some(vec![]),
         ];
-        let mut has_error = false;
 
         for (test, expect)  in zip(tests, expected) {
             let result = deserialize(test).unwrap();
@@ -232,7 +229,6 @@ mod tests {
                 ))
             ]
         ];
-        let mut has_error = false;
 
         for (test, expect)  in zip(tests, expected) {
             let result = deserialize(test).unwrap();

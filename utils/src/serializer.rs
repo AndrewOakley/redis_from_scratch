@@ -1,6 +1,7 @@
 //! Serialize RESP protocol values
 use crate::prelude::*;
-use crate::resp_utils::DataType;
+use crate::DataType;
+
 
 pub fn serialize(input: &DataType) -> Result<String> {
     match input {
