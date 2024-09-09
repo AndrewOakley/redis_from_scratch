@@ -1,27 +1,7 @@
-use std::fmt;
+//! Deserialze RESP protocol values
 use crate::prelude::*;
+use crate::resp_utils::DataType;
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum DataType {
-    SimpleString(String),
-    Error(String),
-    Integer(i64),
-    BulkString(Option<String>),
-    Array(Option<Vec<DataType>>),
-}
-
-fn parse_crlf(input: &str) -> Result<(String, usize)> {
-    if input.len() < 2 {
-        return Err(Error::ParseError(f!("length error Basic parse")));
-    }
-
-    let crlf = input.find("\r\n");
-
-    match input.find("\r\n") {
-        Some(crlf_loc) => Ok((input[..crlf_loc].to_string(), crlf_loc+2)),
-            _ => Err(Error::ParseError(f!("mssing crlf Basic parse"))),
-    }
-}
 
 pub fn deserialize(input: &str) -> Result<DataType> {
     match deserialize_helper(input) {
@@ -30,7 +10,7 @@ pub fn deserialize(input: &str) -> Result<DataType> {
     }
 }
 
-pub fn deserialize_helper(input: &str) -> Result<(DataType, usize)> {
+fn deserialize_helper(input: &str) -> Result<(DataType, usize)> {
     match input.chars().nth(0) {
         Some(resp_type) => match resp_type {
             '+' => {
@@ -136,6 +116,19 @@ pub fn deserialize_helper(input: &str) -> Result<(DataType, usize)> {
     }
 }
 
+fn parse_crlf(input: &str) -> Result<(String, usize)> {
+    if input.len() < 2 {
+        return Err(Error::ParseError(f!("length error Basic parse")));
+    }
+
+    let crlf = input.find("\r\n");
+
+    match input.find("\r\n") {
+        Some(crlf_loc) => Ok((input[..crlf_loc].to_string(), crlf_loc+2)),
+            _ => Err(Error::ParseError(f!("mssing crlf Basic parse"))),
+    }
+}
+
 
 // region: --- tests
 #[cfg(test)]
@@ -192,13 +185,12 @@ mod tests {
         let tests = [
             "*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n",
             "*4\r\n:1\r\n:2\r\n:3\r\n$5\r\nhello\r\n",
-            "*1\r\n$4\r\nping\r\n”",
+            "*1\r\n$4\r\nping\r\n",
             "*2\r\n$4\r\necho\r\n$11\r\nhello world\r\n",
-            "*2\r\n$3\r\nget\r\n$3\r\nkey\r\n",
             "*2\r\n$3\r\nget\r\n$3\r\nkey\r\n",
             "*-1\r\n",
             "*0\r\n",
-            ];
+        ];
         let expected = [
             Some(vec![DataType::BulkString(Some("hello".to_owned())), DataType::BulkString(Some("world".to_owned()))]),
             Some(vec![DataType::Integer(1), DataType::Integer(2), DataType::Integer(3), DataType::BulkString(Some("hello".to_owned()))]),
@@ -207,7 +199,7 @@ mod tests {
             Some(vec![DataType::BulkString(Some("get".to_owned())), DataType::BulkString(Some("key".to_owned()))]),
             None,
             Some(vec![]),
-            ];
+        ];
         let mut has_error = false;
 
         for (test, expect)  in zip(tests, expected) {

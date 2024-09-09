@@ -12,6 +12,8 @@ pub enum Error {
     EmptyInput,
     #[error("Parse error: {0}")]
     ParseError(String),
+    #[error("SerializeError")]
+    SerializeError,
 
     // #[error[transparent]]
     // IO(#[from] std::io::Error),
