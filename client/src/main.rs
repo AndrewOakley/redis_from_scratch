@@ -9,7 +9,8 @@ fn main() -> std::io::Result<()> {
 
     loop {
         let mut line = String::new();
-        println!("127.0.0.1:6379>");
+        print!("127.0.0.1:6379> ");
+        std::io::stdout().flush().unwrap();
         std::io::stdin().read_line(&mut line).unwrap();
 
         let mut input_arr: Vec<DataType> = Vec::new();

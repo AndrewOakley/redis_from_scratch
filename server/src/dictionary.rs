@@ -21,22 +21,41 @@ pub mod dictionary {
         }
 
         pub fn handle_command(&mut self, d_command: DataType) -> String {
+            let err_resp = serialize(&DataType::Error("ERR command no recognized".to_owned())).unwrap();
             let response: String = match d_command {
                 DataType::Array(o_arr) => {
                     if let Some(arr) = o_arr {
+                        if arr.len() == 0 {
+                            return err_resp;
+                        }
                         if arr[0] == "set" {
-                            self.dict.insert("test".to_string(), "out".to_string());
-                            println!("Hello andy");
+                            if arr.len() != 3 {
+                                return err_resp;
+                            }
+
+                            if let DataType::BulkString(Some(key)) = &arr[1] {
+                                if let DataType::BulkString(Some(val)) = &arr[2] {
+                                    self.dict.insert(key.clone(), val.clone());
+                                    // TODO: check error path here
+                                    return f!("{SUCCESS_MSG}");
+                                }
+                            }
                         }
                         if arr[0] == "get" {
-                            let t = self.dict.get("test");
-                            println!("Hello andy, {}", t.unwrap());
+                            if arr.len() != 2 {
+                                return err_resp;
+                            }
+
+                            if let DataType::BulkString(Some(key)) = &arr[1] {
+                                    let val = self.dict.get(key).unwrap();
+                                    return serialize(&DataType::BulkString(Some(val.clone()))).unwrap();
+                            }
                         }
                     }
         
-                    f!("{SUCCESS_MSG}")
+                    err_resp
                 },
-                _ => serialize(&DataType::Error("ERR command no recognized".to_owned())).unwrap(),
+                _ => err_resp,
             };
         
             return response;

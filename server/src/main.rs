@@ -8,7 +8,6 @@ use tokio::net::{TcpListener, TcpStream};
 use utils::deserializer::deserialize;
 use utils::serializer::serialize;
 use utils::DataType;
-use utils::prelude::*;
 
 
 async fn handle_client(mut socket: TcpStream, redis: &Arc<Mutex<Dictionary>>) {
@@ -24,8 +23,6 @@ async fn handle_client(mut socket: TcpStream, redis: &Arc<Mutex<Dictionary>>) {
             },
             Ok(_) => {
                 let command = String::from_utf8(buffer).unwrap();
-                println!("Received command: {}", command);
-                
 
                 let response = {
                     let mut d_command: Option<DataType> = None;
@@ -69,7 +66,6 @@ async fn main() -> std::io::Result<()> {
         println!("New client connected: {}", addr);
         let redis_clone = Arc::clone(&redis);
 
-        // Spawn a new task to handle the client connection
         tokio::spawn(async move {
             handle_client(socket, &redis_clone).await;
         });
