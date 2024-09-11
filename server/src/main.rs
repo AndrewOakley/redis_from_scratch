@@ -23,6 +23,7 @@ async fn handle_client(mut socket: TcpStream, redis: &Arc<Mutex<Dictionary>>) {
             },
             Ok(_) => {
                 let command = String::from_utf8(buffer).unwrap();
+                println!("received: {}", command);
 
                 let response = {
                     let mut d_command: Option<DataType> = None;

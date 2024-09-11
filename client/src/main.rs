@@ -15,8 +15,28 @@ fn main() -> std::io::Result<()> {
 
         let mut input_arr: Vec<DataType> = Vec::new();
 
-        for each_input in line.split_whitespace().into_iter() {
-            let serialized = DataType::BulkString(Some(each_input.to_owned()));
+        let mut buf = String::new();
+        let mut is_quote = false;
+        for each_char in line.chars().into_iter() {
+            if each_char == ' ' && buf.len() > 0 && !is_quote {
+                let serialized = DataType::BulkString(Some(buf.to_owned()));
+                input_arr.push(serialized);
+                buf.clear();
+            } else if each_char == '"' {
+                if is_quote {
+                    let serialized = DataType::BulkString(Some(buf.to_owned()));
+                    input_arr.push(serialized);
+                    buf.clear();
+                }
+
+                is_quote = !is_quote;
+            } else if each_char.is_alphanumeric() || (each_char == ' ' && is_quote) {
+                buf.push(each_char);
+            }
+        }
+
+        if buf.len() > 0 && !is_quote {
+            let serialized = DataType::BulkString(Some(buf.to_owned()));
             input_arr.push(serialized);
         }
 
