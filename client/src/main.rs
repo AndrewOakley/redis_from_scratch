@@ -1,6 +1,7 @@
 use std::io::prelude::*;
 use std::net::TcpStream;
 
+use utils::deserializer::deserialize;
 use utils::serializer::serialize;
 use utils::DataType;
 
@@ -46,8 +47,9 @@ fn main() -> std::io::Result<()> {
 
             let mut buf = vec![0; 1024];
             stream.read(&mut buf).unwrap();
+            let d_buf = deserialize(&String::from_utf8(buf).unwrap()).unwrap();
 
-            println!("{}", String::from_utf8(buf).unwrap());
+            println!("{}", d_buf);
         }
     }
 }

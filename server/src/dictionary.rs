@@ -4,7 +4,7 @@ use utils::prelude::*;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub mod dictionary {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, LinkedList};
 
     use super::*;
 
@@ -12,6 +12,7 @@ pub mod dictionary {
 
     pub struct Dictionary {
         dict: HashMap<String, ExpireValue>,
+        lists: HashMap<String, LinkedList<String>>,
     }
 
     #[derive(Clone)]
@@ -81,6 +82,7 @@ pub mod dictionary {
         pub fn new() -> Self {
             Self {
                 dict: HashMap::new(),
+                lists:  HashMap::new(),
             }
         }
 
@@ -120,27 +122,35 @@ pub mod dictionary {
             None
         }
 
-        fn decr_value(&mut self, key: &String) -> Option<i64> {
-            let mut has_error = false;
-            let mut new_val = -1;
-            self.dict.entry(key.to_string()).and_modify(|cur_exp| {
-                if let Ok(i_val) = cur_exp.value.parse::<i64>() {
-                    new_val = i_val - 1;
-                    cur_exp.value = f!("{new_val}");
-                } else {
-                    has_error = true;
-                }
-            }).or_insert(ExpireValue::no_expire(f!("-1")));
-
-            if !has_error {
-                return Some(new_val);
-            }
-
-            None
-        }
-
         fn delete_value(&mut self, key: &String) -> Option<ExpireValue> {
             return self.dict.remove(key);
+        }
+
+        fn get_list(&self, key: &String) -> DataType {
+            let mut values: Vec<DataType> = Vec::new();
+
+            if let Some(list) = self.lists.get(key) {
+                for each_val in list {
+                    values.push(DataType::BulkString(Some(each_val.clone())));
+                }
+            }
+
+            return if values.len() == 0 { DataType::Array(None) } else { DataType::Array(Some(values)) };
+        }
+
+        fn push_list(&mut self, key: &String, val: &String, push_dir: &DataType) -> usize {
+            let is_lpush = if push_dir == &"lpush" { true } else { false };
+
+            let adj_list = self.lists.entry(key.clone())
+                .and_modify(|list| {
+                    if is_lpush {
+                        list.push_front(val.clone());
+                    } else {
+                        list.push_back(val.clone());
+                    }
+                }).or_insert(LinkedList::from([val.clone()]));
+
+            return adj_list.len();
         }
 
         pub fn handle_command(&mut self, d_command: DataType) -> String {
@@ -242,6 +252,37 @@ pub mod dictionary {
                                     } else {
                                         return serialize(&DataType::Error(f!("ERR value is not an integer or out of range"))).unwrap();
                                     }
+                            }
+
+                            return err_resp;
+                        }
+                        if arr[0] == "lpush" || arr[0] == "rpush" {
+                            if arr.len() < 3 {
+                                return err_resp;
+                            }
+
+                            if let DataType::BulkString(Some(key)) = &arr[1] {
+                                let mut size = 0;
+                                for each_val in &arr[2..] {
+                                    match each_val {
+                                        DataType::BulkString(Some(val)) => { size = self.push_list(key, val, &arr[0]); },
+                                        _ => return err_resp,
+                                    }
+                                }
+
+                                return serialize(&DataType::Integer(size as i64)).unwrap();
+                            }
+
+                            return err_resp;
+                        }
+                        if arr[0] == "lrange" {
+                            if arr.len() != 2 {
+                                return err_resp;
+                            }
+
+                            if let DataType::BulkString(Some(key)) = &arr[1] {
+                                let list = self.get_list(key);
+                                return serialize(&list).unwrap();
                             }
 
                             return err_resp;
